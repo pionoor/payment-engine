@@ -4,12 +4,14 @@ use std::collections::BTreeMap;
 use std::fs;
 
 pub struct PaymentEngine {
-    pub accounts: BTreeMap<u16, Account>,
-    transactions: BTreeMap<u32, Transaction>,
+    // (client, account)
+    pub(crate) accounts: BTreeMap<u16, Account>,
+    // (transaction_id, transaction)
+    transactions: BTreeMap<u32, Transaction>, // using BtreeMap to keep the keys sorted
     failed_transactions: Vec<Transaction>,
-    pub input_file_path: String,
-    pub output_file_path: String,
-    pub failed_txs_output_file_path: String,
+    pub(crate) input_file_path: String,
+    pub(crate) output_file_path: String,
+    pub(crate) failed_txs_output_file_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +34,7 @@ pub(crate) enum TransactionType {
     Dispute,
     Resolve,
     ChargeBack,
-    Void,
+    Void, // used for default
 }
 
 impl Default for TransactionType {
@@ -65,11 +67,12 @@ impl PaymentEngine {
         }
     }
 
+    // parse the transactions file and load it into a btree map.
     fn parse_transactions(&mut self) -> Result<()> {
         let mut transactions: BTreeMap<u32, Transaction> = BTreeMap::new();
         // Build the CSV reader and iterate over each record.
-        let foo = fs::read_to_string(self.input_file_path.to_owned())?;
-        let mut rdr = csv::Reader::from_reader(foo.as_bytes());
+        let txs_string = fs::read_to_string(self.input_file_path.to_owned())?;
+        let mut rdr = csv::Reader::from_reader(txs_string.as_bytes());
 
         for transaction in rdr.deserialize() {
             let record: Transaction = transaction?;
@@ -79,6 +82,7 @@ impl PaymentEngine {
         Ok(())
     }
 
+    // Reads the transactions and and process them into accounts
     pub fn process_transactions(&mut self) -> Result<()> {
         self.parse_transactions()?;
         let mut accounts: BTreeMap<u16, Account> = BTreeMap::new();
@@ -99,7 +103,7 @@ impl PaymentEngine {
                     account.total = account.total + tx.amount;
                 }
                 TransactionType::Withdrawal => {
-                    // Only perform withdrawal if there is enough money; otherwise ignore.
+                    // Perform withdrawal if there is enough money; otherwise ignore.
                     if tx.amount <= account.total {
                         account.available = account.available - tx.amount;
                         account.total = account.total - tx.amount;
@@ -108,6 +112,7 @@ impl PaymentEngine {
                     }
                 }
                 TransactionType::Dispute => {
+                    // Perform dispute if the original transactions exists; otherwise ignore.
                     if let Some(original_tx) = self.transactions.get(&tx_id) {
                         account.available = account.available - original_tx.amount;
                         account.held = account.held + original_tx.amount;
@@ -116,6 +121,7 @@ impl PaymentEngine {
                     }
                 }
                 TransactionType::Resolve => {
+                    // Perform resolve if the original transactions exists; otherwise ignore.
                     if let Some(original_tx) = self.transactions.get(&tx_id) {
                         account.available = account.available + original_tx.amount;
                         account.held = account.held - original_tx.amount;
@@ -124,6 +130,7 @@ impl PaymentEngine {
                     }
                 }
                 TransactionType::ChargeBack => {
+                    // Perform chargeBack if the original transactions exists; otherwise ignore.
                     if let Some(original_tx) = self.transactions.get(&tx_id) {
                         account.total = account.total + original_tx.amount;
                         account.held = account.held - original_tx.amount;
@@ -137,7 +144,11 @@ impl PaymentEngine {
         }
         self.accounts = accounts;
         self.failed_transactions = failed_transactions;
-
+        println!("A total of {} accounts were found!", &self.accounts.len());
+        println!(
+            "A total of {} transactions have failed!",
+            &self.failed_transactions.len()
+        );
         self.save_accounts_file()?;
         self.save_failed_txs_to_file()?;
         Ok(())

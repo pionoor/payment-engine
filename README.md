@@ -6,10 +6,10 @@ and chargebacks, and then outputs the state of clients accounts as a CSV file.
 ### How to Run
 `cargo run -- transactions.csv > accounts.csv`.
 
-`transactions.csv` is the name of the csv file that exists in the `./csvFiles` dir of the repo. It contains a series of transactions to be 
+`transactions.csv` is the name of the csv file that exists in the `./csvFiles`. It contains a series of transactions to be 
 read and processed.
 
-`accounts.csv` is the name of the file that exists in the `./csvFiles` dir of the repo. It would contain the accounts details 
+`accounts.csv` is the name of the file that exists in the `./csvFiles`. It would contain the accounts details 
 as a result processing the transactions.
 
 ### Notes
