@@ -1,5 +1,5 @@
 use anyhow::Result;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 use std::fs;
 
@@ -26,7 +26,7 @@ pub struct Account {
     pub(crate) locked: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum TransactionType {
     Deposit,
@@ -34,12 +34,12 @@ pub(crate) enum TransactionType {
     Dispute,
     Resolve,
     ChargeBack,
-    Void, // used for default
+    Unknown(String),
 }
 
 impl Default for TransactionType {
     fn default() -> Self {
-        TransactionType::Void
+        TransactionType::Unknown(String::default())
     }
 }
 
@@ -97,49 +97,51 @@ impl PaymentEngine {
                 locked: false,
             });
 
-            match tx.r#type {
+            match &tx.r#type {
                 TransactionType::Deposit => {
-                    account.available = account.available + tx.amount;
-                    account.total = account.total + tx.amount;
+                    account.available += tx.amount;
+                    account.total += tx.amount;
                 }
                 TransactionType::Withdrawal => {
                     // Perform withdrawal if there is enough money; otherwise ignore.
                     if tx.amount <= account.total {
-                        account.available = account.available - tx.amount;
-                        account.total = account.total - tx.amount;
+                        account.available -= tx.amount;
+                        account.total -= tx.amount;
                     } else {
                         failed_transactions.push((*tx).clone());
                     }
                 }
                 TransactionType::Dispute => {
                     // Perform dispute if the original transactions exists; otherwise ignore.
-                    if let Some(original_tx) = self.transactions.get(&tx_id) {
-                        account.available = account.available - original_tx.amount;
-                        account.held = account.held + original_tx.amount;
+                    if let Some(original_tx) = self.transactions.get(tx_id) {
+                        account.available -= original_tx.amount;
+                        account.held += original_tx.amount;
                     } else {
                         failed_transactions.push((*tx).clone());
                     }
                 }
                 TransactionType::Resolve => {
                     // Perform resolve if the original transactions exists; otherwise ignore.
-                    if let Some(original_tx) = self.transactions.get(&tx_id) {
-                        account.available = account.available + original_tx.amount;
-                        account.held = account.held - original_tx.amount;
+                    if let Some(original_tx) = self.transactions.get(tx_id) {
+                        account.available += original_tx.amount;
+                        account.held -= original_tx.amount;
                     } else {
                         failed_transactions.push((*tx).clone());
                     }
                 }
                 TransactionType::ChargeBack => {
                     // Perform chargeBack if the original transactions exists; otherwise ignore.
-                    if let Some(original_tx) = self.transactions.get(&tx_id) {
-                        account.total = account.total + original_tx.amount;
-                        account.held = account.held - original_tx.amount;
+                    if let Some(original_tx) = self.transactions.get(tx_id) {
+                        account.total += original_tx.amount;
+                        account.held -= original_tx.amount;
                         account.locked = true;
                     } else {
                         failed_transactions.push((*tx).clone());
                     }
                 }
-                TransactionType::Void => {}
+                TransactionType::Unknown(_) => {
+                    failed_transactions.push((*tx).clone());
+                }
             }
         }
         self.accounts = accounts;
@@ -183,5 +185,23 @@ where
         Err(e) => {
             panic!("failed parsing {} into float:{}", x, e)
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for TransactionType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?.to_lowercase();
+        let tx_type = match s.as_str() {
+            "deposit" => TransactionType::Deposit,
+            "withdrawal" => TransactionType::Withdrawal,
+            "dispute" => TransactionType::Dispute,
+            "resolve" => TransactionType::Resolve,
+            "chargeback" => TransactionType::ChargeBack,
+            _ => TransactionType::Unknown(s),
+        };
+        Ok(tx_type)
     }
 }
