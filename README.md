@@ -17,5 +17,5 @@ as a result processing the transactions.
 - Both of the csv files must exist before running the app. It does not create new ones if one or both of those file do 
 not exist.
 - The name of those csv files must match with name of the files that are passed in the arguments.
-- An extra file `failed.csv` will contain those failed transactions. This might be useful in case we need to deal with them later
+- An extra file `failed.csv` will contain those failed transactions, each with an err message. This might be useful in case we need to deal with them later.
 

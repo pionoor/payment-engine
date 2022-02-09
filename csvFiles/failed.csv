@@ -1,3 +1,4 @@
-type,client,tx,amount
-withdrawal,1,5,3.02342
-withdrawaldd,1,6,3.02342
+"withdrawal,1,4,1.5234,Can not process transaction; account is locked."
+"withdrawal,1,5,3.02342,Can not process transaction; account is locked."
+"withdrawal,1,5,Withdrawal transaction must be above zero"
+"withdrawal,1,5,Can not process transaction; account is locked."
